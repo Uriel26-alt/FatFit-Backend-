@@ -1,0 +1,308 @@
+// FatFit · Diagrama de la base de datos (pegar en https://dbdiagram.io)
+// Generado a partir de db/01_esquema.sql. Un esquema por microservicio.
+
+Project FatFit {
+  database_type: 'PostgreSQL'
+  Note: 'Base fatfit: un esquema por microservicio. No hay llaves foráneas entre esquemas; el vínculo es usuario_id (id de auth.usuarios que viaja en el JWT).'
+}
+
+// ===================== auth =====================
+
+Table auth.usuarios {
+  id uuid [pk, default: `gen_random_uuid()`]
+  nombre text [not null]
+  correo text [not null, unique, note: 'siempre en minúsculas']
+  contrasena_hash text [not null, note: 'bcrypt']
+  rol text [not null, default: 'usuario', note: 'usuario | profesionista | admin']
+  activo boolean [not null, default: true]
+  creado_en timestamptz [not null, default: `now()`]
+  actualizado_en timestamptz [not null, default: `now()`]
+}
+
+Table auth.consentimientos {
+  id uuid [pk, default: `gen_random_uuid()`]
+  usuario_id uuid [not null, ref: > auth.usuarios.id]
+  tipo text [not null, note: 'terminos | datos_salud']
+  version text [not null, note: 'versión del aviso de privacidad']
+  aceptado_en timestamptz [not null, default: `now()`]
+
+  indexes {
+    (usuario_id, tipo, version) [unique]
+  }
+}
+
+Table auth.tokens {
+  id uuid [pk, default: `gen_random_uuid()`]
+  usuario_id uuid [not null, ref: > auth.usuarios.id]
+  tipo text [not null, note: 'refresco | recuperacion']
+  token_hash text [not null, unique, note: 'solo se guarda el hash (sha256)']
+  expira_en timestamptz [not null]
+  usado_en timestamptz [note: 'un token sirve una sola vez']
+  creado_en timestamptz [not null, default: `now()`]
+
+  indexes {
+    (usuario_id, tipo)
+  }
+}
+
+// ===================== salud =====================
+
+Table salud.perfiles_salud {
+  usuario_id uuid [pk, note: 'id de auth.usuarios (sin FK entre esquemas)']
+  edad smallint [note: '14 a 100']
+  sexo text [note: 'mujer | hombre']
+  altura_cm "numeric(4,1)" [note: '100 a 250']
+  peso_inicial_kg "numeric(4,1)" [note: '30 a 300']
+  nivel_actividad text [note: 'sedentario | ligero | moderado | activo | muyActivo']
+  objetivo text [note: 'bajar | mantener | ganar']
+  lugar text [not null, default: 'casa', note: 'casa | casaEquipo | gimnasio | parque']
+  minutos smallint [not null, default: 30, note: 'minutos de ejercicio al día (10 a 120)']
+  condicion_otra text [not null, default: '']
+  alimentos "text[]" [not null, note: 'alimentos que más consume']
+  alimento_otro text [not null, default: '']
+  creado_en timestamptz [not null, default: `now()`]
+  actualizado_en timestamptz [not null, default: `now()`]
+}
+
+Table salud.condiciones_salud {
+  usuario_id uuid [not null, ref: > salud.perfiles_salud.usuario_id]
+  condicion text [not null, note: 'rodilla | lumbar | hipertension | diabetes | cardiopatia | embarazo']
+
+  indexes {
+    (usuario_id, condicion) [pk]
+  }
+}
+
+Table salud.mediciones {
+  id uuid [pk, default: `gen_random_uuid()`]
+  usuario_id uuid [not null, ref: > salud.perfiles_salud.usuario_id]
+  fecha date [not null]
+  peso_kg "numeric(4,1)" [not null]
+  creado_en timestamptz [not null, default: `now()`]
+
+  indexes {
+    (usuario_id, fecha) [unique, note: 'un registro de peso por día']
+  }
+}
+
+Table salud.recomendaciones {
+  id uuid [pk, default: `gen_random_uuid()`]
+  usuario_id uuid [not null, ref: > salud.perfiles_salud.usuario_id]
+  origen text [not null, note: 'reglas | fati | profesionista']
+  tipo text [not null, note: 'p. ej. consulta_medica']
+  texto text [not null]
+  vigente boolean [not null, default: true]
+  creado_en timestamptz [not null, default: `now()`]
+
+  indexes {
+    (usuario_id, tipo) [unique, note: 'parcial: WHERE origen = reglas']
+  }
+}
+
+// ===================== entrenamiento =====================
+
+Table entrenamiento.ejercicios {
+  id uuid [pk, default: `gen_random_uuid()`]
+  nombre text [not null, unique]
+  tipo text [not null, note: 'calentamiento | fuerza | cardio | estiramiento']
+  grupo_muscular text [not null, note: 'piernas | gluteos | pecho | espalda | hombros | core | cuerpo_completo']
+  nivel smallint [not null, note: '1 principiante · 2 intermedio · 3 avanzado']
+  equipo text [not null, note: 'ninguno | basico | gimnasio']
+  impacto text [not null, note: 'bajo | alto']
+  al_aire_libre boolean [not null, default: false]
+  contraindicaciones "text[]" [not null, note: 'condiciones de salud que lo excluyen']
+  minutos smallint [not null, default: 5]
+  dosis text [not null, note: '«3 series × 10», «5 min»']
+  icono text [not null, default: 'entrenar']
+  activo boolean [not null, default: true]
+}
+
+Table entrenamiento.rutinas {
+  id uuid [pk, default: `gen_random_uuid()`]
+  usuario_id uuid [not null, note: 'id de auth.usuarios (sin FK entre esquemas)']
+  nombre text [not null]
+  minutos smallint [not null]
+  equipo text [not null]
+  nota text [not null]
+  sesiones_semana smallint [not null]
+  parametros jsonb [not null, note: 'datos del perfil con los que se generó']
+  activa boolean [not null, default: true]
+  creado_en timestamptz [not null, default: `now()`]
+
+  indexes {
+    usuario_id [unique, note: 'parcial: WHERE activa (una rutina activa por usuario)']
+  }
+}
+
+Table entrenamiento.rutina_ejercicios {
+  rutina_id uuid [not null, ref: > entrenamiento.rutinas.id]
+  dia_semana smallint [not null, note: '1 lunes … 7 domingo']
+  orden smallint [not null]
+  ejercicio_id uuid [not null, ref: > entrenamiento.ejercicios.id]
+  dosis text [not null]
+
+  indexes {
+    (rutina_id, dia_semana, orden) [pk]
+  }
+}
+
+Table entrenamiento.sesiones_completadas {
+  id uuid [pk, default: `gen_random_uuid()`]
+  usuario_id uuid [not null, note: 'id de auth.usuarios (sin FK entre esquemas)']
+  rutina_id uuid [ref: > entrenamiento.rutinas.id]
+  fecha date [not null]
+  ejercicios_completados "uuid[]" [not null, note: 'ids de ejercicios marcados ese día']
+  completada boolean [not null, default: false]
+  actualizado_en timestamptz [not null, default: `now()`]
+
+  indexes {
+    (usuario_id, fecha) [unique, note: 'una sesión por día']
+  }
+}
+
+// ===================== nutricion =====================
+
+Table nutricion.alimentos {
+  id uuid [pk, default: `gen_random_uuid()`]
+  nombre text [not null]
+  marca text
+  codigo_barras text [unique]
+  origen text [not null, default: 'local', note: 'local | openfoodfacts | usda']
+  categoria text [not null, default: 'otros']
+  porcion text [not null, note: '«1 pieza», «1 taza», «100 g»']
+  kcal "numeric(6,1)" [not null, note: 'por porción']
+  proteina_g "numeric(5,1)" [not null, default: 0]
+  carbos_g "numeric(5,1)" [not null, default: 0]
+  grasa_g "numeric(5,1)" [not null, default: 0]
+  sustituto_id uuid [ref: > nutricion.alimentos.id, note: 'opción más ligera para el análisis']
+  activo boolean [not null, default: true]
+  creado_en timestamptz [not null, default: `now()`]
+}
+
+Table nutricion.registros_comida {
+  id uuid [pk, default: `gen_random_uuid()`]
+  usuario_id uuid [not null, note: 'id de auth.usuarios (sin FK entre esquemas)']
+  fecha date [not null]
+  tiempo text [not null, note: 'desayuno | comida | cena | colacion']
+  alimento_id uuid [ref: > nutricion.alimentos.id]
+  cantidad "numeric(5,2)" [not null, default: 1, note: 'número de porciones']
+  nombre text [not null, note: 'copia del catálogo al registrar']
+  porcion text [not null]
+  kcal "numeric(7,1)" [not null]
+  proteina_g "numeric(6,1)" [not null]
+  carbos_g "numeric(6,1)" [not null]
+  grasa_g "numeric(6,1)" [not null]
+  creado_en timestamptz [not null, default: `now()`]
+
+  indexes {
+    (usuario_id, fecha)
+  }
+}
+
+// ===================== fati =====================
+
+Table fati.planes {
+  id text [pk, note: 'basico | fatiMax | pro']
+  nombre text [not null]
+  precio_mensual "numeric(8,2)" [note: 'NULL = gratis']
+  moneda text [not null, default: 'MXN']
+  cuota_fati integer [not null, note: 'peticiones a Fati por mes; la cambia el admin']
+  resumen text [not null]
+  beneficios "text[]" [not null]
+  incluye_profesionista boolean [not null, default: false]
+  orden smallint [not null, default: 0]
+  actualizado_en timestamptz [not null, default: `now()`]
+}
+
+Table fati.suscripciones {
+  id uuid [pk, default: `gen_random_uuid()`]
+  usuario_id uuid [not null, note: 'id de auth.usuarios (sin FK entre esquemas)']
+  plan_id text [not null, ref: > fati.planes.id]
+  estado text [not null, default: 'activa', note: 'activa | terminada']
+  proveedor text [not null, default: 'simulado', note: 'simulado | stripe | revenuecat']
+  referencia text
+  inicio timestamptz [not null, default: `now()`]
+  fin timestamptz
+
+  indexes {
+    usuario_id [unique, note: 'parcial: WHERE estado = activa (una suscripción activa por usuario)']
+  }
+}
+
+Table fati.uso_ia {
+  usuario_id uuid [not null, note: 'id de auth.usuarios (sin FK entre esquemas)']
+  periodo "char(7)" [not null, note: 'mes: AAAA-MM']
+  peticiones integer [not null, default: 0]
+
+  indexes {
+    (usuario_id, periodo) [pk]
+  }
+}
+
+Table fati.mensajes {
+  id uuid [pk, default: `gen_random_uuid()`]
+  usuario_id uuid [not null, note: 'id de auth.usuarios (sin FK entre esquemas)']
+  de text [not null, note: 'usuario | fati']
+  texto text [not null]
+  basado_en_calculos boolean [not null, default: false]
+  origen text [not null, default: 'usuario', note: 'usuario | llm | reglas | sistema']
+  creado_en timestamptz [not null, default: `now()`]
+
+  indexes {
+    (usuario_id, creado_en)
+  }
+}
+
+Table fati.configuracion {
+  clave text [pk]
+  valor jsonb [not null]
+  descripcion text [not null, default: '']
+  actualizado_en timestamptz [not null, default: `now()`]
+}
+
+// ===================== Grupos (un color por microservicio) =====================
+
+TableGroup auth {
+  auth.usuarios
+  auth.consentimientos
+  auth.tokens
+}
+
+TableGroup salud {
+  salud.perfiles_salud
+  salud.condiciones_salud
+  salud.mediciones
+  salud.recomendaciones
+}
+
+TableGroup entrenamiento {
+  entrenamiento.ejercicios
+  entrenamiento.rutinas
+  entrenamiento.rutina_ejercicios
+  entrenamiento.sesiones_completadas
+}
+
+TableGroup nutricion {
+  nutricion.alimentos
+  nutricion.registros_comida
+}
+
+TableGroup fati {
+  fati.planes
+  fati.suscripciones
+  fati.uso_ia
+  fati.mensajes
+  fati.configuracion
+}
+
+// ===================== Relaciones lógicas entre microservicios =====================
+// NO existen como llaves foráneas en la base: cada servicio guarda el usuario_id
+// del JWT. Quita los «//» si quieres que el diagrama dibuje esas líneas.
+
+// Ref: salud.perfiles_salud.usuario_id - auth.usuarios.id
+// Ref: entrenamiento.rutinas.usuario_id > auth.usuarios.id
+// Ref: entrenamiento.sesiones_completadas.usuario_id > auth.usuarios.id
+// Ref: nutricion.registros_comida.usuario_id > auth.usuarios.id
+// Ref: fati.suscripciones.usuario_id > auth.usuarios.id
+// Ref: fati.uso_ia.usuario_id > auth.usuarios.id
+// Ref: fati.mensajes.usuario_id > auth.usuarios.id

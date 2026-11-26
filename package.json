@@ -1,0 +1,68 @@
+{
+  "name": "fatfit-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend de FatFit: microservicios NestJS + PostgreSQL con Swagger",
+  "scripts": {
+    "build": "for a in gateway auth salud entrenamiento nutricion fati; do nest build $a || exit 1; done",
+    "dev": "concurrently -n gateway,auth,salud,entrena,nutri,fati -c gray,blue,green,yellow,magenta,cyan \"nest start gateway --watch\" \"nest start auth --watch\" \"nest start salud --watch\" \"nest start entrenamiento --watch\" \"nest start nutricion --watch\" \"nest start fati --watch\"",
+    "start": "concurrently -n gateway,auth,salud,entrena,nutri,fati -c gray,blue,green,yellow,magenta,cyan \"node dist/apps/gateway/main.js\" \"node dist/apps/auth/main.js\" \"node dist/apps/salud/main.js\" \"node dist/apps/entrenamiento/main.js\" \"node dist/apps/nutricion/main.js\" \"node dist/apps/fati/main.js\"",
+    "dev:gateway": "nest start gateway --watch",
+    "dev:auth": "nest start auth --watch",
+    "dev:salud": "nest start salud --watch",
+    "dev:entrenamiento": "nest start entrenamiento --watch",
+    "dev:nutricion": "nest start nutricion --watch",
+    "dev:fati": "nest start fati --watch",
+    "test": "jest",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "db:levantar": "bash db/db.sh levantar",
+    "db:aplicar": "bash db/db.sh aplicar",
+    "db:psql": "bash db/db.sh psql"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "roots": [
+      "<rootDir>/apps",
+      "<rootDir>/libs"
+    ],
+    "testRegex": ".*\\.spec\\.ts$",
+    "moduleNameMapper": {
+      "^@app/comun(.*)$": "<rootDir>/libs/comun/src$1"
+    }
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.14.0",
+    "@nestjs/common": "^12.6.2",
+    "@nestjs/config": "^12.1.1",
+    "@nestjs/core": "^12.6.2",
+    "@nestjs/jwt": "^12.0.5",
+    "@nestjs/platform-express": "^12.6.2",
+    "@nestjs/swagger": "^12.1.2",
+    "@nestjs/typeorm": "^12.0.3",
+    "bcryptjs": "^3.0.3",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "http-proxy-middleware": "^3.0.11",
+    "pg": "^8.23.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "typeorm": "^1.1.3"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^12.0.15",
+    "@nestjs/schematics": "^11.1.0",
+    "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.19.43",
+    "concurrently": "^9.2.5",
+    "fork-ts-checker-webpack-plugin": "^9.2.0",
+    "jest": "^30.5.2",
+    "ts-jest": "^29.4.15",
+    "ts-loader": "^9.6.2",
+    "tsconfig-paths-webpack-plugin": "^4.2.0",
+    "typescript": "^5.9.3",
+    "webpack": "^5.113.0",
+    "webpack-node-externals": "^3.0.0"
+  }
+}

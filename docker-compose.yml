@@ -1,0 +1,75 @@
+# Todo el backend con un comando:   docker compose up -d --build
+# Solo el gateway queda publicado (puerto 3000); los microservicios y la base
+# viven en la red interna de Docker y no se pueden alcanzar desde fuera.
+#
+# Antes de usarlo fuera de tu máquina, define en .env JWT_SECRETO y CLAVE_INTERNA
+# (y POSTGRES_PASSWORD si la base va a quedar en un servidor).
+
+x-servicio: &servicio
+  build: .
+  image: fatfit-backend
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+  environment: &entorno
+    NODE_ENV: ${NODE_ENV:-production}
+    TZ: ${TZ:-America/Mexico_City}
+    DATABASE_URL: postgres://fatfit:${POSTGRES_PASSWORD:-fatfit_dev}@db:5432/fatfit
+    JWT_SECRETO: ${JWT_SECRETO:?Define JWT_SECRETO en .env}
+    JWT_EXPIRA: ${JWT_EXPIRA:-1h}
+    CLAVE_INTERNA: ${CLAVE_INTERNA:?Define CLAVE_INTERNA en .env}
+    URL_PUBLICA: ${URL_PUBLICA:-http://localhost:3000}
+    ORIGENES_CORS: ${ORIGENES_CORS:-}
+    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    FATI_MODELO: ${FATI_MODELO:-claude-opus-5-5}
+    # Dentro de la red de Docker cada servicio se alcanza por su nombre.
+    URL_AUTH: http://auth:3001
+    URL_SALUD: http://salud:3002
+    URL_ENTRENAMIENTO: http://entrenamiento:3003
+    URL_NUTRICION: http://nutricion:3004
+    URL_FATI: http://fati:3005
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fatfit
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fatfit_dev}
+      POSTGRES_DB: fatfit
+    volumes:
+      - datos:/var/lib/postgresql/data
+      # Solo se ejecutan la primera vez, cuando la base está vacía.
+      - ./db/01_esquema.sql:/docker-entrypoint-initdb.d/01_esquema.sql:ro
+      - ./db/02_semillas.sql:/docker-entrypoint-initdb.d/02_semillas.sql:ro
+      - ./db/03_cuentas_prueba.sql:/docker-entrypoint-initdb.d/03_cuentas_prueba.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fatfit -d fatfit"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  auth:
+    <<: *servicio
+    command: node dist/apps/auth/main.js
+  salud:
+    <<: *servicio
+    command: node dist/apps/salud/main.js
+  entrenamiento:
+    <<: *servicio
+    command: node dist/apps/entrenamiento/main.js
+  nutricion:
+    <<: *servicio
+    command: node dist/apps/nutricion/main.js
+  fati:
+    <<: *servicio
+    command: node dist/apps/fati/main.js
+  gateway:
+    <<: *servicio
+    command: node dist/apps/gateway/main.js
+    ports:
+      - "${PUERTO_PUBLICO:-3000}:3000"
+
+volumes:
+  datos:
